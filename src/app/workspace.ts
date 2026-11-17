@@ -3,14 +3,13 @@ import { createCamera } from "../features/panorama";
 import { createPlayback } from "../features/chapters";
 import { createDiscovery } from "../features/hotspots";
 import { createBranch } from "../features/interviews";
-import { createJournal } from "../features/journal";
-import type { Command, Position } from "../shared/types";
-export function createWorkspace() {
+import type { Journal } from "../features/journal";
+import type { Command, FilmContent, Position } from "../shared/types";
+export function createWorkspace(content: FilmContent, journal: Journal) {
   const camera = createCamera(),
-    playback = createPlayback(),
-    discovery = createDiscovery(() => playback.state),
-    branch = createBranch(),
-    journal = createJournal(),
+    playback = createPlayback(content.chapters),
+    discovery = createDiscovery(content.hotspots, () => playback.state),
+    branch = createBranch(content.people),
     tab = ref("story");
   const position = (): Position => ({
     chapterId: playback.state.chapterId,
@@ -62,6 +61,7 @@ export function createWorkspace() {
     if (h) journal.save(h, position());
   }
   return {
+    content,
     camera,
     playback,
     discovery,
@@ -74,3 +74,4 @@ export function createWorkspace() {
     save,
   };
 }
+export type Workspace = ReturnType<typeof createWorkspace>;

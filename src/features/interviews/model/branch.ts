@@ -1,15 +1,14 @@
 import { computed, ref } from "vue";
-import type { Position } from "../../../shared/types";
-import { findPerson } from "../lib/transcript";
-export function createBranch() {
+import type { Person, Position } from "../../../shared/types";
+export function createBranch(people: Person[]) {
   const personId = ref<string | null>(null),
     returnPoint = ref<Position | null>(null),
     paragraph = ref(0);
   const person = computed(() =>
-    personId.value ? findPerson(personId.value) : undefined,
+    personId.value ? people.find((p) => p.id === personId.value) : undefined,
   );
   function enter(id: string, position: Position) {
-    if (!findPerson(id)) return;
+    if (!people.some((p) => p.id === id)) return;
     returnPoint.value = structuredClone(position);
     personId.value = id;
     paragraph.value = 0;

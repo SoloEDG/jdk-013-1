@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { people } from "../../../shared/content";
+import type { Person } from "../../../shared/types";
+defineProps<{ people: Person[] }>();
 defineEmits<{ open: [id: string] }>();
 </script>
 <template>

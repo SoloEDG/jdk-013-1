@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { onBeforeUnmount, onMounted, ref, shallowRef } from "vue";
 import {
   Waves,
   ArrowUpRight,
@@ -11,17 +11,113 @@ import {
   Compass,
   ChevronRight,
   X,
+  WifiOff,
 } from "lucide-vue-next";
 import { PanoramaView } from "../features/panorama";
 import { ChapterList, MediaPlayer, Transport } from "../features/chapters";
 import { HotspotLayer, HotspotDetail } from "../features/hotspots";
 import { InterviewPanel, PeopleList } from "../features/interviews";
-import { JournalPanel } from "../features/journal";
+import { createJournal, filmStorageKey, JournalPanel } from "../features/journal";
+import {
+  createOfflineLibrary,
+  materializePackage,
+  packageJournalKey,
+  OfflineEntry,
+  OfflinePanel,
+  OfflineTheatre,
+  registerOfflineShell,
+} from "../features/offline";
+import type { Materialized } from "../features/offline/lib/materialize";
+import { currentContent } from "../shared/content";
 import { createWorkspace } from "./workspace";
-const w = createWorkspace(),
+import type { OfflinePackage } from "../shared/types";
+registerOfflineShell();
+
+const content = currentContent(),
+  online = ref(navigator.onLine),
   about = ref(false),
   stage = ref<HTMLElement>(),
-  fullError = ref("");
+  fullError = ref(""),
+  w = createWorkspace(
+    content,
+    createJournal(content.film.id, filmStorageKey(content.film.id)),
+  );
+
+/* Offline packages keep their own frozen film. Notes are always read from the
+   film a package was made for, so another film opened later cannot leak in. */
+const offline = createOfflineLibrary({ content: () => currentContent() });
+// Decide the first screen before mount: with no network we must not render
+// live media that can only fail.
+if (!navigator.onLine && offline.packages.value.length)
+  w.tab.value = "offline";
+
+const activePackage = ref<OfflinePackage | null>(null),
+  theatre = shallowRef<Materialized | null>(null),
+  theatreJournal = shallowRef<ReturnType<typeof createJournal> | null>(null),
+  theatreWorkspace = shallowRef<ReturnType<typeof createWorkspace> | null>(
+    null,
+  ),
+  theatreError = ref("");
+
+async function openPackage(pkg: OfflinePackage) {
+  theatreError.value = "";
+  await offline.verifyPackage(pkg);
+  // Resolve every chapter first; materialize drops the ones whose media is
+  // really missing so the theatre shows exactly what can play offline.
+  const result = await materializePackage(
+    pkg,
+    pkg.content.chapters.map((c) => c.id),
+    offline.missingIdsFor(pkg),
+  );
+  if (!result.content.chapters.length) {
+    const missing = offline
+      .missingFor(pkg)
+      .map((a) => a.label)
+      .join("、");
+    theatreError.value = `此包没有可放映的章节：${missing || "章节影像或全景缺失"}。请联网后在展映包上「重新下载缺失部分」。`;
+    return;
+  }
+  closeTheatre();
+  theatre.value = result;
+  activePackage.value = pkg;
+  const journal = createJournal(pkg.filmId, packageJournalKey(pkg.id), pkg.notes);
+  theatreJournal.value = journal;
+  theatreWorkspace.value = createWorkspace(result.content, journal);
+}
+function closeTheatre() {
+  if (theatre.value) for (const url of theatre.value.objectUrls) URL.revokeObjectURL(url);
+  theatre.value = null;
+  activePackage.value = null;
+  theatreWorkspace.value = null;
+  theatreJournal.value = null;
+}
+const offlineBuilder = ref(false);
+const needsAttention = () =>
+  offline.jobs.some((job) => job.status !== "running");
+function retryPackage(id: string) {
+  if (!navigator.onLine) {
+    theatreError.value = "当前断网，请联网后再重新下载缺失素材。";
+    return;
+  }
+  offline.retryPackage(id);
+  offlineBuilder.value = true;
+  w.tab.value = "offline";
+}
+function updateOnline() {
+  online.value = navigator.onLine;
+}
+onMounted(() => {
+  window.addEventListener("online", updateOnline);
+  window.addEventListener("offline", updateOnline);
+  // Detect assets the browser evicted so the entry never promises more than
+  // what is really stored.
+  void offline.verifyAll();
+});
+onBeforeUnmount(() => {
+  window.removeEventListener("online", updateOnline);
+  window.removeEventListener("offline", updateOnline);
+  closeTheatre();
+});
 async function fullscreen() {
   try {
     if (document.fullscreenElement) await document.exitFullscreen();
@@ -34,7 +130,10 @@ async function fullscreen() {
 <template>
   <div class="site-shell">
     <header class="site-header">
-      <a class="brand" href="#" @click.prevent="w.tab.value = 'story'"
+      <a
+        class="brand"
+        href="#"
+        @click.prevent="w.tab.value = 'story'"
         ><span class="brand-icon"><Waves /></span
         ><b>岸线 <i>SHORELINE</i></b></a
       >
@@ -49,11 +148,33 @@ async function fullscreen() {
           @click="w.tab.value = 'journal'"
         >
           探索手记 <span>{{ w.journal.entries.value.length }}</span></button
+        ><button
+          :class="{ active: w.tab.value === 'offline' }"
+          @click="w.tab.value = 'offline'"
+        >
+          离线展映
+          <span :class="{ alert: needsAttention() }">{{
+            offline.packages.value.length
+          }}</span>
+          <i
+            v-if="needsAttention()"
+            class="nav-dot"
+            aria-label="有制作任务待确认"
+          /> </button
         ><button @click="about = true">
           关于本片 <ArrowUpRight :size="13" />
         </button>
       </nav>
-      <div class="edition">一座海港的记忆 <span>VOL. 001</span></div>
+      <div class="edition">
+        <button
+          v-if="offline.packages.value.length"
+          class="edition-offline"
+          @click="w.tab.value = 'offline'"
+        >
+          <WifiOff :size="12" /> {{ offline.packages.value.length }} 个展映包
+        </button>
+        一座海港的记忆 <span>VOL. 001</span>
+      </div>
     </header>
     <main>
       <div class="intro">
@@ -67,7 +188,32 @@ async function fullscreen() {
           <p>3 个章节 <i>/</i> 360° 自由探索 <i>/</i> 3 位讲述者</p>
         </div>
       </div>
-      <template v-if="w.tab.value === 'story'"
+      <template v-if="w.tab.value === 'offline'">
+        <template v-if="!offlineBuilder">
+          <OfflineEntry
+            :library="offline"
+            :online="online"
+            @open="openPackage"
+            @build="offlineBuilder = true"
+            @retry="retryPackage"
+            @delete="offline.removePackage($event)"
+          />
+          <p v-if="theatreError" class="hint warning" role="status">
+            {{ theatreError }}
+          </p>
+        </template>
+        <template v-else>
+          <button class="text-button back-button" @click="offlineBuilder = false">
+            ← 返回离线展映入口
+          </button>
+          <OfflinePanel
+            :library="offline"
+            :chapters="content.chapters"
+            @open="openPackage"
+          />
+        </template>
+      </template>
+      <template v-else-if="w.tab.value === 'story'"
         ><div class="workspace">
           <section ref="stage" class="stage">
             <PanoramaView
@@ -133,6 +279,7 @@ async function fullscreen() {
             <p class="sidebar-copy">循着潮水，走进他们的日常。</p>
             <ChapterList
               :active="w.playback.state.chapterId"
+              :chapters="content.chapters"
               @select="w.dispatch({ type: 'chapter', id: $event })"
             />
             <div class="chapter-foot">
@@ -178,7 +325,7 @@ async function fullscreen() {
               <h2>听见他们的故事</h2>
               <span>THE VOICES</span>
             </div>
-            <PeopleList @open="w.enterPerson($event)" />
+            <PeopleList :people="content.people" @open="w.enterPerson($event)" />
           </div></section></template
       ><JournalPanel
         v-else
@@ -190,6 +337,17 @@ async function fullscreen() {
         ><span>让每一段平凡的生活，被看见。 <Waves :size="18" /></span>
       </footer>
     </main>
+    <OfflineTheatre
+      v-if="activePackage && theatre && theatreWorkspace && theatreJournal"
+      :pkg="activePackage"
+      :workspace="theatreWorkspace"
+      :journal="theatreJournal"
+      :missing-interviews="theatre.missingInterviews"
+      :missing-asset-ids="offline.missingIdsFor(activePackage)"
+      :dropped-chapters="theatre.droppedChapters"
+      :object-urls="theatre.objectUrls"
+      @close="closeTheatre"
+    />
     <div v-if="about" class="modal-backdrop" @click.self="about = false">
       <section
         class="about"

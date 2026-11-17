@@ -1,7 +1,8 @@
 import { computed, ref } from "vue";
-import { hotspots } from "../../../shared/content";
+import type { Hotspot } from "../../../shared/types";
 import { activeHotspots } from "../lib/visibility";
 export function createDiscovery(
+  hotspots: Hotspot[],
   position: () => { chapterId: string; time: number },
 ) {
   const enabled = ref(true),

@@ -2,7 +2,7 @@
 import { ArrowLeft, ArrowRight, Quote } from "lucide-vue-next";
 import { readingDuration } from "../lib/transcript";
 import type { Branch } from "../model/branch";
-defineProps<{ branch: Branch }>();
+defineProps<{ branch: Branch; artwork?: string }>();
 defineEmits<{ back: [] }>();
 </script>
 <template>
@@ -13,7 +13,16 @@ defineEmits<{ back: [] }>();
     aria-modal="true"
     aria-label="人物访谈"
   >
-    <div class="interview-art">
+    <div
+      class="interview-art"
+      :style="
+        artwork
+          ? {
+              backgroundImage: `linear-gradient(#253f3c88, #15282099), url(${artwork})`,
+            }
+          : undefined
+      "
+    >
       <div class="portrait">{{ branch.person.value.name.slice(0, 1) }}</div>
       <small>口述影像 · 田野记录</small>
     </div>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { chapters } from "../../../shared/content";
+import type { Chapter } from "../../../shared/types";
 import { timecode } from "../../../shared/format";
-defineProps<{ active: string }>();
+defineProps<{ active: string; chapters: Chapter[] }>();
 defineEmits<{ select: [id: string] }>();
 </script>
 <template>

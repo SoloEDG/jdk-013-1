@@ -1,4 +1,19 @@
-import type { Chapter, Hotspot, Person } from "./types";
+import type {
+  Chapter,
+  FilmContent,
+  FilmMeta,
+  Hotspot,
+  Person,
+} from "./types";
+
+export const film: FilmMeta = {
+  id: "tidal-stories",
+  title: "潮汐之间",
+  subtitle: "Between the Tides",
+  volume: "VOL. 001",
+  version: "2026.11",
+};
+
 export const chapters: Chapter[] = [
   {
     id: "dawn",
@@ -139,3 +154,7 @@ export const people: Person[] = [
     ],
   },
 ];
+
+export function currentContent(): FilmContent {
+  return { film: { ...film }, chapters, hotspots, people };
+}

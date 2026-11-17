@@ -32,6 +32,20 @@ export interface Person {
   quote: string;
   paragraphs: string[];
 }
+export interface FilmMeta {
+  id: string;
+  title: string;
+  subtitle: string;
+  volume: string;
+  version: string;
+}
+/** A frozen, self-contained description of the film (or the selected part of it). */
+export interface FilmContent {
+  film: FilmMeta;
+  chapters: Chapter[];
+  hotspots: Hotspot[];
+  people: Person[];
+}
 export interface Position {
   chapterId: string;
   time: number;
@@ -47,6 +61,8 @@ export interface Entry {
   title: string;
   note: string;
   createdAt: number;
+  /** Film an entry belongs to. Older entries did not record one. */
+  filmId?: string;
 }
 export type Command =
   | { type: "chapter"; id: string }
@@ -54,3 +70,40 @@ export type Command =
   | { type: "hotspot"; id: string }
   | { type: "return" }
   | { type: "revisit"; entry: Entry };
+
+export type AssetKind = "video" | "panorama" | "interview" | "text";
+
+/** One downloadable unit. Media shared by chapters appears only once. */
+export interface PackageAsset {
+  id: string;
+  kind: AssetKind;
+  label: string;
+  /** Versioned Cache API key. */
+  cacheKey: string;
+  /** Original media URL, used to resolve playback sources offline. */
+  url?: string;
+  /** Inline JSON payload for text/interview assets. */
+  data?: string;
+  chapters: string[];
+  size: number;
+}
+
+export type NoteScope = "selected" | "all" | "none";
+
+export interface OfflinePackage {
+  id: string;
+  createdAt: number;
+  completedAt: number;
+  filmId: string;
+  filmTitle: string;
+  /** The content version that was current when production started. */
+  contentVersion: string;
+  chapterIds: string[];
+  /** Frozen film snapshot; playback never consults the live catalog. */
+  content: FilmContent;
+  assets: PackageAsset[];
+  notes: Entry[];
+  notesScope: NoteScope;
+  status: "ready" | "incomplete";
+  missingAssetIds: string[];
+}

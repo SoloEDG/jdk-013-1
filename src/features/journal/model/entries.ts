@@ -1,11 +1,21 @@
 import { ref } from "vue";
 import type { Entry, Hotspot, Position } from "../../../shared/types";
 import { loadEntries, persist } from "../lib/storage";
-export function createJournal() {
-  const entries = ref<Entry[]>(loadEntries()),
+export function createJournal(
+  filmId: string,
+  storageKey?: string,
+  initial: Entry[] = [],
+) {
+  const stored = loadEntries(storageKey).filter(
+    (e) => !e.filmId || e.filmId === filmId,
+  );
+  const entries = ref<Entry[]>(
+      stored.length ? stored : initial.map((e) => JSON.parse(JSON.stringify(e)) as Entry),
+    ),
     error = ref("");
+  if (!stored.length && entries.value.length) persist(entries.value, storageKey);
   function commit(next: Entry[]) {
-    if (!persist(next)) {
+    if (!persist(next, storageKey)) {
       error.value = "本地空间不足，记录未保存，请先导出手记";
       return;
     }
@@ -29,6 +39,7 @@ export function createJournal() {
           title: hotspot.title,
           note: "",
           createdAt: Date.now(),
+          filmId,
         },
       ]);
     },
